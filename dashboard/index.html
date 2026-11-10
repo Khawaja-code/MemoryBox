@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MemoryBox</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg:#edf0f5; --surface:#ffffff; --ink:#0f1b2d; --muted:#5a6a80; --line:#d8dee8; --soft:#f4f6fa;
+    --rail:#0f1b2d; --rail-ink:#c9d3e3; --rail-line:#22324b;
+    --ai:#5b46f0; --ai-soft:#ecebff; --rec:#e5484d; --ok:#17855a; --bad:#c92a30; --warn:#a35a00;
+    --click:#3558ff; --key:#8393ab; --scroll:#12998a; --prot:#e5484d;
+    --radius:8px;
+    font-family: system-ui, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
+  }
+  :root[data-theme="dark"] {
+    --bg:#0b1220; --surface:#111a2b; --ink:#e7ecf5; --muted:#92a1b8; --line:#243148; --soft:#16213a;
+    --rail:#070d18; --rail-ink:#b7c3d8; --rail-line:#1b2740;
+    --ai:#a99cff; --ai-soft:#221f4a; --rec:#ff6b70; --ok:#4cc38a; --bad:#ff7a7f; --warn:#f0a04b;
+    --click:#7b93ff; --key:#6f7f98; --scroll:#3fd1bf; --prot:#ff6b70;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0b1220; --surface:#111a2b; --ink:#e7ecf5; --muted:#92a1b8; --line:#243148; --soft:#16213a;
+      --rail:#070d18; --rail-ink:#b7c3d8; --rail-line:#1b2740;
+      --ai:#a99cff; --ai-soft:#221f4a; --rec:#ff6b70; --ok:#4cc38a; --bad:#ff7a7f; --warn:#f0a04b;
+      --click:#7b93ff; --key:#6f7f98; --scroll:#3fd1bf; --prot:#ff6b70;
+    }
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.5; display:grid; grid-template-columns:220px minmax(0,1fr); }
+  h1, h2, h3 { margin:0; line-height:1.2; }
+  h1 { font-size:26px; font-weight:650; letter-spacing:-.01em; }
+  h2 { font-size:17px; font-weight:650; }
+  h3 { font-size:14px; font-weight:650; }
+  p { margin:0; }
+  code { font-family:ui-monospace, Consolas, monospace; font-size:.9em; background:var(--soft); padding:1px 6px; border-radius:4px; }
+  .muted { color:var(--muted); }
+  .num { font-variant-numeric:tabular-nums; }
+  :focus-visible { outline:2px solid var(--ai); outline-offset:2px; }
+
+  /* ---------- rail ---------- */
+  .rail { background:var(--rail); color:var(--rail-ink); display:flex; flex-direction:column; gap:4px; padding:20px 12px; position:sticky; top:0; height:100vh; }
+  .brand { display:flex; align-items:center; gap:10px; padding:0 8px 18px; color:#fff; font-weight:650; font-size:17px; }
+  .rail button.nav { all:unset; box-sizing:border-box; display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:6px; cursor:pointer; color:var(--rail-ink); width:100%; }
+  .rail button.nav:hover { background:var(--rail-line); }
+  .rail button.nav[aria-current="page"] { background:var(--rail-line); color:#fff; box-shadow:inset 3px 0 0 var(--ai); }
+  .rail button.nav:focus-visible { outline:2px solid #fff; }
+  .rail .spacer { flex:1; }
+  .copbtn { all:unset; box-sizing:border-box; display:flex; align-items:center; gap:9px; padding:10px 12px; margin-bottom:8px; border-radius:6px; cursor:pointer; background:#5b46f0; color:#fff; font-weight:600; }
+  .copbtn:hover { background:#6c59f5; }
+  .copbtn:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+  .recpill { display:flex; align-items:center; gap:8px; padding:9px 10px; border:1px solid var(--rail-line); border-radius:6px; font-size:13px; }
+  .dot { width:9px; height:9px; border-radius:50%; background:#5d6c86; flex:none; }
+  .recpill.live { border-color:var(--rec); color:#fff; }
+  .recpill.live .dot { background:var(--rec); animation:pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity:.35; } }
+  .themebtn { all:unset; box-sizing:border-box; cursor:pointer; padding:8px 10px; border-radius:6px; font-size:13px; color:var(--rail-ink); }
+  .themebtn:hover { background:var(--rail-line); }
+  .themebtn:focus-visible { outline:2px solid #fff; }
+
+  /* ---------- main ---------- */
+  main { min-width:0; padding:28px 36px 64px; max-width:1180px; width:100%; }
+  .top { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:22px; flex-wrap:wrap; }
+  .top p { margin-top:4px; max-width:60ch; }
+  .view[hidden] { display:none; }
+  .block { margin-top:30px; }
+  .block > header { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
+  .panel { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); }
+  .panel.pad { padding:16px 18px; }
+
+  /* buttons / inputs */
+  button, input, select { font:inherit; color:inherit; }
+  .btn { background:var(--ink); color:var(--surface); border:1px solid var(--ink); border-radius:6px; padding:7px 14px; cursor:pointer; font-weight:550; white-space:nowrap; }
+  .btn:hover { filter:brightness(1.15); }
+  .btn.ghost { background:transparent; color:var(--ink); border-color:var(--line); }
+  .btn.ghost:hover { background:var(--soft); filter:none; }
+  .btn.ai { background:var(--ai); border-color:var(--ai); color:#fff; }
+  :root[data-theme="dark"] .btn.ai { color:#0b1220; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.ai { color:#0b1220; } }
+  .btn.danger { background:var(--bad); border-color:var(--bad); color:#fff; }
+  .btn.small { padding:4px 10px; font-size:13px; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; filter:none; }
+  input, select { background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:7px 10px; min-width:0; }
+  input[type=checkbox] { accent-color:var(--ai); }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  label.f { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--muted); }
+
+  /* key figures: inline, divided by rules, not cards */
+  .figures { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); }
+  .figures > div { padding:14px 18px; border-left:1px solid var(--line); }
+  .figures > div:first-child { border-left:0; }
+  .figures b { display:block; font-size:28px; font-weight:650; letter-spacing:-.02em; }
+  .figures span { color:var(--muted); font-size:13px; }
+
+  /* ruled lists */
+  .list { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); }
+  .item { display:grid; gap:12px; align-items:center; padding:13px 16px; border-top:1px solid var(--line); }
+  .item:first-child { border-top:0; }
+  .item.rec { grid-template-columns:minmax(150px,1.1fr) minmax(160px,2fr) auto; }
+  .item.sug { grid-template-columns:auto minmax(0,1fr) auto; }
+  .item.run { grid-template-columns:90px minmax(0,1fr) 130px; }
+  .item.sched { grid-template-columns:minmax(0,1.3fr) minmax(0,1.5fr) auto; }
+  .empty { padding:22px 18px; color:var(--muted); }
+  .item > .btn:only-child { justify-self:start; }
+  .name { font-weight:600; background:none; border:0; padding:0; cursor:pointer; text-align:left; }
+  .name:hover { text-decoration:underline; }
+  .sub { color:var(--muted); font-size:13px; }
+  .aimark { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%; background:var(--ai-soft); color:var(--ai); flex:none; }
+  .pill { display:inline-block; padding:1px 9px; border-radius:99px; font-size:12px; font-weight:600; border:1px solid var(--line); }
+  .pill.success, .pill.reliable { color:var(--ok); border-color:currentColor; }
+  .pill.failed, .pill.failing { color:var(--bad); border-color:currentColor; }
+  .pill.stopped, .pill.skipped, .pill.flaky { color:var(--warn); border-color:currentColor; }
+  .pill.running { color:var(--ai); border-color:currentColor; }
+
+  /* tape strip: the signature element */
+  svg.tape { display:block; width:100%; height:30px; background:var(--soft); border-radius:4px; }
+  svg.tape.big { height:54px; }
+  .tape .click { fill:var(--click); } .tape .key { fill:var(--key); } .tape .scroll { fill:var(--scroll); } .tape .prot { fill:var(--prot); }
+  .tape .base { stroke:var(--line); }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:6px; }
+  .legend i { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
+
+  /* chart */
+  svg.chart { width:100%; height:170px; display:block; }
+  .chart text { fill:var(--muted); font-size:10.5px; }
+  .chart .grid { stroke:var(--line); }
+
+  /* drawer + copilot */
+  dialog.drawer { margin:0 0 0 auto; height:100vh; max-height:100vh; width:min(560px,100vw); border:0; border-left:1px solid var(--line); background:var(--surface); color:var(--ink); padding:0; }
+  dialog.drawer::backdrop { background:rgba(8,14,26,.5); }
+  .drawer .in { padding:22px 24px 40px; display:grid; gap:20px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { background:var(--soft); border:1px solid var(--line); border-radius:99px; padding:2px 10px; font-size:13px; }
+  .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px 16px; }
+  .stats b { display:block; font-size:19px; }
+  .stats span { font-size:12px; color:var(--muted); }
+  .tips { display:grid; gap:8px; padding:0; margin:0; list-style:none; }
+  .tips li { padding:9px 12px; border-radius:6px; background:var(--soft); border-left:3px solid var(--muted); font-size:14px; }
+  .tips li.warn { border-left-color:var(--warn); }
+  .dots { display:flex; gap:4px; }
+  .dots i { width:10px; height:10px; border-radius:3px; background:var(--line); }
+  .dots i.success { background:var(--ok); } .dots i.failed { background:var(--bad); } .dots i.stopped, .dots i.skipped { background:var(--warn); }
+  svg.map { width:100%; height:auto; background:var(--soft); border-radius:6px; }
+  .map .path { stroke:var(--click); fill:none; stroke-width:1.5; stroke-dasharray:4 3; }
+  .map circle { fill:var(--click); } .map text { fill:#fff; font-size:9px; text-anchor:middle; dominant-baseline:central; font-weight:700; }
+
+  aside.copilot { position:fixed; right:0; top:0; height:100vh; width:min(400px,100vw); background:var(--surface); border-left:1px solid var(--line); display:flex; flex-direction:column; transform:translateX(102%); transition:transform .22s ease; z-index:20; }
+  aside.copilot.open { transform:none; }
+  .cp-head { display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid var(--line); }
+  .cp-log { flex:1; overflow:auto; padding:16px 18px; display:flex; flex-direction:column; gap:12px; }
+  .msg { max-width:92%; padding:9px 12px; border-radius:10px; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .msg.me { align-self:flex-end; background:var(--ink); color:var(--surface); border-bottom-right-radius:2px; }
+  .msg.bot { align-self:flex-start; background:var(--soft); border-bottom-left-radius:2px; }
+  .proposal { align-self:stretch; border:1px solid var(--ai); border-radius:8px; padding:12px; background:var(--ai-soft); display:grid; gap:8px; }
+  .proposal b { font-weight:650; }
+  .cp-form { padding:12px 14px 16px; border-top:1px solid var(--line); display:grid; gap:10px; }
+  .cp-form form { display:flex; gap:8px; }
+  .cp-form input { flex:1; }
+
+  .preview { margin-top:10px; padding:12px 14px; border-radius:6px; background:var(--soft); min-height:64px; }
+  .preview.err { color:var(--bad); }
+  .toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); background:var(--ink); color:var(--surface); padding:10px 16px; border-radius:8px; max-width:min(560px,90vw); z-index:50; }
+  .toast.err { background:var(--bad); color:#fff; }
+  .toast[hidden] { display:none; }
+  .scopes { display:flex; gap:16px; flex-wrap:wrap; }
+
+  @media (max-width: 860px) {
+    body { grid-template-columns:1fr; }
+    .rail { position:static; height:auto; flex-direction:row; flex-wrap:wrap; align-items:center; padding:10px; }
+    .brand { padding:0 8px 0 4px; } .rail .spacer { display:none; }
+    main { padding:20px 16px 56px; }
+    .figures { grid-template-columns:repeat(2,1fr); } .figures > div:nth-child(3) { border-left:0; } .figures > div:nth-child(n+3) { border-top:1px solid var(--line); }
+    .item.rec, .item.sched, .item.run, .item.sug { grid-template-columns:1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
+</style>
+</head>
+<body>
+<nav class="rail" aria-label="Main">
+  <div class="brand">
+    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect x="1.5" y="4.5" width="23" height="17" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="13" r="2.6" fill="currentColor"/><circle cx="17" cy="13" r="2.6" fill="currentColor"/></svg>
+    MemoryBox
+  </div>
+  <button class="nav" data-go="overview">Overview</button>
+  <button class="nav" data-go="recordings">Recordings</button>
+  <button class="nav" data-go="schedules">Schedules</button>
+  <button class="nav" data-go="activity">Activity</button>
+  <button class="nav" data-go="settings">Settings</button>
+  <div class="spacer"></div>
+  <button class="copbtn" id="open-copilot" type="button"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z" fill="currentColor"/></svg>Ask Copilot</button>
+  <div class="recpill" id="recpill" role="status"><span class="dot"></span><span id="recpill-text">Not recording</span></div>
+  <button class="themebtn" id="theme" type="button">Switch theme</button>
+</nav>
+
+<main>
+<!-- ===================== Overview ===================== -->
+<section class="view" id="v-overview">
+  <div class="top">
+    <div><h1>Overview</h1><p class="muted">Everything stays on this computer. Keys typed into password fields are never recorded.</p></div>
+  </div>
+
+  <div class="figures" id="figures"></div>
+
+  <div class="block">
+    <header><h2>Record a routine</h2><span class="sub">Click Start, switch to your target window, do the task, then come back and stop. That last click is removed.</span></header>
+    <div class="panel pad row">
+      <input id="rec-name" aria-label="Recording name" placeholder="Recording name" value="My routine" maxlength="80">
+      <button class="btn" id="rec-start" type="button">Start recording</button>
+      <button class="btn ghost" id="rec-stop" type="button">Stop and save</button>
+    </div>
+  </div>
+
+  <div class="block">
+    <header><h2>Runs in the last 14 days</h2>
+      <div class="legend" style="margin:0"><span><i style="background:var(--ok)"></i>Success</span><span><i style="background:var(--bad)"></i>Failed</span><span><i style="background:var(--warn)"></i>Stopped or skipped</span></div></header>
+    <div class="panel pad"><svg class="chart" id="chart" role="img" aria-label="Runs per day for the last 14 days"></svg></div>
+  </div>
+
+  <div class="block">
+    <header><h2>Suggested for you</h2><span class="sub">Found locally from your own recordings and run history.</span></header>
+    <div class="list" id="suggestions"></div>
+  </div>
+</section>
+
+<!-- ===================== Recordings ===================== -->
+<section class="view" id="v-recordings" hidden>
+  <div class="top"><div><h1>Recordings</h1><p class="muted">Each strip is the recording's timeline. Open one for an AI summary, advice and similar recordings.</p></div></div>
+  <div class="panel pad row" style="margin-bottom:12px">
+    <label class="f">Speed<input id="play-speed" type="number" value="1" min="0.1" max="5" step="0.1" style="width:80px"></label>
+    <label class="f">Loops<input id="play-loops" type="number" value="1" min="1" max="50" style="width:80px"></label>
+    <span class="sub" style="flex:1;min-width:220px">Playback starts after a 3 second countdown. Emergency stop: move the mouse to the top-left corner.</span>
+    <button class="btn danger" id="stop-play" type="button">Stop playback</button>
+  </div>
+  <div class="list" id="recs"></div>
+  <div class="legend" style="margin-top:10px"><span><i style="background:var(--click)"></i>Click</span><span><i style="background:var(--key)"></i>Key</span><span><i style="background:var(--scroll)"></i>Scroll</span><span><i style="background:var(--prot)"></i>Protected entry skipped</span></div>
+</section>
+
+<!-- ===================== Schedules ===================== -->
+<section class="view" id="v-schedules" hidden>
+  <div class="top"><div><h1>Schedules</h1><p class="muted">Say when in plain English. MemoryBox turns it into a repeating schedule and shows the next runs before you save.</p></div></div>
+  <div class="panel pad">
+    <div class="row">
+      <label class="f">Recording<select id="s-rec" style="min-width:200px"></select></label>
+      <label class="f" style="flex:1;min-width:240px">When should it run?<input id="s-text" placeholder="every weekday at 9:30am" maxlength="200" autocomplete="off"></label>
+      <label class="f">Retries<input id="s-retry" type="number" min="0" max="10" value="0" style="width:80px"></label>
+      <button class="btn ai" id="s-add" type="button" disabled>Add schedule</button>
+    </div>
+    <div class="preview muted" id="s-preview" aria-live="polite">Try: every monday and friday at 5pm, monthly on the 15th at 10am, every 2 hours.</div>
+    <details style="margin-top:12px"><summary class="sub" style="cursor:pointer">Build it manually instead</summary>
+      <div class="row" style="margin-top:10px">
+        <select id="m-type" aria-label="Repeat"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option><option value="custom">Custom (cron)</option></select>
+        <input id="m-time" type="time" value="09:00" aria-label="Time">
+        <select id="m-day" aria-label="Weekday"><option>mon</option><option>tue</option><option>wed</option><option>thu</option><option>fri</option><option>sat</option><option>sun</option></select>
+        <input id="m-date" type="date" aria-label="Date (monthly uses the day, yearly uses month and day)">
+        <input id="m-cron" placeholder="m h dom mon dow" size="16" aria-label="Cron expression">
+        <button class="btn ghost" id="m-fill" type="button">Use this</button>
+      </div>
+    </details>
+  </div>
+  <div class="block"><header><h2>Active and past schedules</h2></header><div class="list" id="scheds"></div></div>
+</section>
+
+<!-- ===================== Activity ===================== -->
+<section class="view" id="v-activity" hidden>
+  <div class="top"><div><h1>Activity</h1><p class="muted" id="report"></p></div></div>
+  <div class="block" style="margin-top:0"><header><h2>Runs</h2></header><div class="list" id="runs"></div></div>
+  <div class="block"><header><h2>Remote access log</h2><span class="sub">Every remote call is logged, allowed or refused.</span></header><div class="list" id="remote"></div></div>
+</section>
+
+<!-- ===================== Settings ===================== -->
+<section class="view" id="v-settings" hidden>
+  <div class="top"><div><h1>Settings</h1></div></div>
+  <div class="block" style="margin-top:0">
+    <header><h2>AI</h2><span class="pill" id="ai-pill">Local only</span></header>
+    <div class="panel pad" style="display:grid;gap:14px">
+      <p>These work offline, with no account: plain-English schedules, recording summaries, habit detection, next-action prediction, duplicate detection and the Copilot.</p>
+      <p class="muted">Optionally, connect Claude so the Copilot understands free-form requests and can polish recording names. It is off until you switch it on. Only step labels such as "Left-click" or "Type text", counts and recording names are sent. Typed characters, key names and screen positions never leave this computer, and the model can only propose actions that you confirm.</p>
+      <div class="row">
+        <label class="f">API key <input id="ai-key" type="password" autocomplete="off" placeholder="sk-ant-..." style="width:260px"></label>
+        <label class="f">Model <input id="ai-model" style="width:200px" placeholder="claude-haiku-5-5"></label>
+        <label class="row" style="margin-top:18px"><input type="checkbox" id="ai-cloud"> Use cloud AI</label>
+        <button class="btn" id="ai-save" type="button" style="margin-top:18px">Save AI settings</button>
+      </div>
+      <p class="sub" id="ai-hint"></p>
+    </div>
+  </div>
+  <div class="block">
+    <header><h2>Remote access for Hermes</h2></header>
+    <div class="panel pad" style="display:grid;gap:12px">
+      <p class="muted">Remote clients must send the token in an <code>X-Token</code> header and only get the permissions ticked here. Edit rights stay off by default.</p>
+      <div class="scopes">
+        <label class="row"><input type="checkbox" class="scope" value="read"> Read</label>
+        <label class="row"><input type="checkbox" class="scope" value="run"> Run</label>
+        <label class="row"><input type="checkbox" class="scope" value="edit"> Edit</label>
+      </div>
+      <div class="row">
+        <button class="btn" id="save-scope" type="button">Save permissions</button>
+        <button class="btn ghost" id="show-token" type="button">Show token</button>
+        <button class="btn ghost" id="new-token" type="button">Create new token</button>
+        <code id="token-out"></code>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<!-- ===================== Copilot ===================== -->
+<aside class="copilot" id="copilot" aria-label="Copilot" aria-hidden="true">
+  <div class="cp-head"><h2>Copilot</h2><button class="btn ghost small" id="close-copilot" type="button">Close</button></div>
+  <div class="cp-log" id="cp-log" aria-live="polite"></div>
+  <div class="cp-form">
+    <div class="chips" id="cp-chips"></div>
+    <form id="cp-form"><input id="cp-input" aria-label="Message to Copilot" placeholder="Play, schedule, or ask..." maxlength="400" autocomplete="off"><button class="btn ai" type="submit" id="cp-send">Send</button></form>
+  </div>
+</aside>
+
+<dialog class="drawer" id="drawer" aria-label="Recording details"><div class="in" id="drawer-in"></div></dialog>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const NS = 'http://www.w3.org/2000/svg';
+
+/* ---------- tiny helpers (textContent only, so names can never inject HTML) ---------- */
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === 'class') el.className = v; else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  return el;
+}
+function s(tag, attrs, ...kids) {
+  const el = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
+  for (const kid of kids) if (kid) el.append(kid);
+  return el;
+}
+async function api(path, method = 'GET', body) {
+  const opt = { method, headers: { 'X-MemoryBox-Local': '1' } };
+  if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+  const res = await fetch(path, opt);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : (res.statusText || 'Request failed'));
+  return data;
+}
+let toastTimer;
+function say(text, kind) {
+  const t = $('toast'); t.textContent = text; t.className = 'toast' + (kind === 'err' ? ' err' : ''); t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, kind === 'err' ? 7000 : 4000);
+}
+async function act(fn, okText) {
+  try { const r = await fn(); if (okText) say(okText); await refresh(); return r; }
+  catch (e) { say(e.message, 'err'); }
+}
+const when = (db) => db ? new Date(db.replace(' ', 'T') + 'Z') : null;      // database times are UTC
+const fmt = (d) => d ? d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+const fmtIso = (iso) => fmt(new Date(iso));
+const secs = (ms) => (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + 's';
+function humanTok(t) {                                  // mirrors ai/describe.py humanize()
+  if (t.startsWith('click:')) return ({ left: 'Left-click', right: 'Right-click', middle: 'Middle-click' })[t.split('.').pop().toLowerCase()] || 'Click';
+  if (t === 'type_text') return 'Type text'; if (t === 'scroll') return 'Scroll';
+  if (t.startsWith('key:Key.')) return 'Press ' + t.slice(8).replace(/_[lr]$/, '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return t.startsWith('key:') ? 'Press shortcut' : t;
+}
+const empty = (text) => h('div', { class: 'empty' }, text);
+
+/* ---------- navigation ---------- */
+const VIEWS = ['overview', 'recordings', 'schedules', 'activity', 'settings'];
+function go(view) {
+  if (!VIEWS.includes(view)) view = 'overview';
+  for (const v of VIEWS) $('v-' + v).hidden = v !== view;
+  document.querySelectorAll('.rail .nav').forEach(b => { if (b.dataset.go === view) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  if (location.hash !== '#' + view) history.replaceState(null, '', '#' + view);
+}
+document.querySelectorAll('.rail .nav').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
+
+/* ---------- theme ---------- */
+function setTheme(t) { document.documentElement.setAttribute('data-theme', t); try { localStorage.setItem('mb-theme', t); } catch (e) {} }
+try { const t = localStorage.getItem('mb-theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+$('theme').onclick = () => {
+  const cur = document.documentElement.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  setTheme(cur === 'dark' ? 'light' : 'dark');
+};
+
+/* ---------- the tape strip ---------- */
+const tapeCache = new Map();                      // key: id + event count
+async function loadTape(rec) {
+  const key = rec.id + ':' + rec.event_count;
+  if (!tapeCache.has(key)) tapeCache.set(key, api(`/api/recordings/${rec.id}/timeline`).catch(() => null));
+  return tapeCache.get(key);
+}
+function drawTape(tl, big) {
+  const W = 600, H = big ? 54 : 30;
+  const svg = s('svg', { class: 'tape' + (big ? ' big' : ''), viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': 'Timeline of recorded actions' });
+  svg.append(s('line', { class: 'base', x1: 0, x2: W, y1: H / 2, y2: H / 2, 'stroke-width': 1 }));
+  if (!tl || !tl.events.length) return svg;
+  const dur = Math.max(tl.duration_ms, 1);
+  const spec = { click: ['click', 0.1, 0.9], scroll: ['scroll', 0.3, 0.7], key: ['key', 0.38, 0.62], protected: ['prot', 0.15, 0.85] };
+  for (const e of tl.events) {
+    const [cls, a, b] = spec[e.type] || spec.key;
+    const x = Math.min(W - 2, (e.t / dur) * (W - 2));
+    svg.append(s('rect', { class: cls, x: x.toFixed(1), y: (H * a).toFixed(1), width: 2, height: (H * (b - a)).toFixed(1), rx: 1 }));
+  }
+  return svg;
+}
+function drawMap(tl) {
+  const clicks = tl.events.filter(e => e.type === 'click');
+  if (!clicks.length) return null;
+  const xs = clicks.map(c => c.x), ys = clicks.map(c => c.y);
+  const pad = 40, minX = Math.min(...xs) - pad, maxX = Math.max(...xs) + pad, minY = Math.min(...ys) - pad, maxY = Math.max(...ys) + pad;
+  const w = Math.max(maxX - minX, 200), hgt = Math.max(maxY - minY, 120);
+  const svg = s('svg', { class: 'map', viewBox: `${minX} ${minY} ${w} ${hgt}`, role: 'img', 'aria-label': 'Where the clicks land on screen, in order' });
+  const r = Math.max(w, hgt) / 45;
+  svg.append(s('polyline', { class: 'path', points: clicks.map(c => `${c.x},${c.y}`).join(' '), 'stroke-width': r / 7 }));
+  clicks.slice(0, 40).forEach((c, i) => {
+    const g = s('g', {});
+    g.append(s('circle', { cx: c.x, cy: c.y, r }));
+    const t = s('text', { x: c.x, y: c.y, 'font-size': r * 1.1 }); t.textContent = i + 1; g.append(t);
+    svg.append(g);
+  });
+  return svg;
+}
+
+/* ---------- state + refresh ---------- */
+let recs = [], recNames = {}, aiStatus = null;
+async function refresh() {
+  const [r, scheds, runs, routines, status, rep, settings, remote, ai, overview] = await Promise.all([
+    api('/api/recordings'), api('/api/schedules'), api('/api/runs'), api('/api/routines'), api('/api/record/status'),
+    api('/api/report'), api('/api/settings'), api('/api/remote-log'), api('/api/ai/status'), api('/api/ai/overview'),
+  ]);
+  recs = r; recNames = Object.fromEntries(r.map(x => [x.id, x.name])); aiStatus = ai;
+  renderRecorder(status); renderFigures(rep); renderChart(runs); renderSuggestions(overview, routines);
+  renderRecordings(r); renderSchedules(scheds); renderActivity(runs, rep, remote); renderSettings(settings, ai);
+}
+function renderRecorder(st) {
+  const live = st.state !== 'idle';
+  $('recpill').classList.toggle('live', live);
+  $('recpill-text').textContent = live ? 'Recording: ' + st.name : 'Not recording';
+}
+function renderFigures(rep) {
+  const rate = rep.success_rate_percent == null ? 'n/a' : rep.success_rate_percent + '%';
+  $('figures').replaceChildren(...[[rep.recordings, 'Recordings'], [rep.active_schedules, 'Active schedules'], [rep.total_runs, 'Runs'], [rate, 'Success rate']]
+    .map(([v, l]) => h('div', {}, h('b', { class: 'num' }, v), h('span', {}, l))));
+}
+function renderChart(runs) {
+  const days = [];
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  for (let i = 13; i >= 0; i--) { const d = new Date(today); d.setDate(d.getDate() - i); days.push({ d, ok: 0, bad: 0, other: 0 }); }
+  for (const r of runs) {
+    const t = when(r.started_at); if (!t) continue;
+    const day = days.find(x => x.d.toDateString() === t.toDateString()); if (!day) continue;
+    if (r.status === 'success') day.ok++; else if (r.status === 'failed') day.bad++; else if (r.status !== 'running') day.other++;
+  }
+  const W = 700, H = 170, L = 26, B = 22, T = 8, max = Math.max(4, ...days.map(x => x.ok + x.bad + x.other));
+  const bw = (W - L) / days.length, svg = $('chart');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.replaceChildren();
+  for (const g of [0, 0.5, 1]) {
+    const y = T + (H - B - T) * (1 - g);
+    svg.append(s('line', { class: 'grid', x1: L, x2: W, y1: y, y2: y }));
+    const t = s('text', { x: L - 6, y: y + 3, 'text-anchor': 'end' }); t.textContent = Math.round(max * g); svg.append(t);
+  }
+  days.forEach((day, i) => {
+    let y = H - B; const x = L + i * bw + bw * 0.22, w = bw * 0.56;
+    for (const [n, color] of [[day.ok, 'var(--ok)'], [day.bad, 'var(--bad)'], [day.other, 'var(--warn)']]) {
+      if (!n) continue; const hh = (H - B - T) * n / max; y -= hh;
+      svg.append(s('rect', { x, y, width: w, height: hh, fill: color, rx: 2 }));
+    }
+    if (i % 2 === 1 || i === 13) { const t = s('text', { x: x + w / 2, y: H - 6, 'text-anchor': 'middle' }); t.textContent = day.d.getDate(); svg.append(t); }
+  });
+}
+function sparkle() {
+  const svg = s('svg', { width: 14, height: 14, viewBox: '0 0 24 24', 'aria-hidden': 'true' });
+  svg.append(s('path', { d: 'M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z', fill: 'currentColor' })); return svg;
+}
+function renderSuggestions(o, routines) {
+  const items = [];
+  for (const sg of o.schedule_suggestions) items.push(h('div', { class: 'item sug' },
+    h('span', { class: 'aimark' }, sparkle()),
+    h('div', {}, h('div', {}, h('b', {}, sg.recording_name), ': ', sg.human), h('div', { class: 'sub' }, sg.evidence + ' Next: ' + fmtIso(sg.next_runs[0]) + '.')),
+    h('button', { class: 'btn ai small', type: 'button', onclick: () => act(() => api('/api/ai/execute', 'POST', { action: 'schedule', recording_id: sg.recording_id, rule: sg.rule }), 'Scheduled: ' + sg.human) }, 'Add schedule')));
+  for (const g of o.duplicates) items.push(h('div', { class: 'item sug' },
+    h('span', { class: 'aimark' }, sparkle()),
+    h('div', {}, h('div', {}, 'Very similar recordings: ', h('b', {}, g.names.join(', '))), h('div', { class: 'sub' }, `${Math.round(g.similarity * 100)}% alike. Consider keeping one.`)),
+    h('button', { class: 'btn ghost small', type: 'button', onclick: () => { go('recordings'); } }, 'Review')));
+  for (const rt of routines.slice(0, 3)) items.push(h('div', { class: 'item sug' },
+    h('span', { class: 'aimark' }, sparkle()),
+    h('div', {}, h('div', {}, 'Routine seen ', h('b', {}, rt.support + ' times')), h('div', { class: 'sub' }, rt.pattern.map(humanTok).join(' > '))),
+    h('button', { class: 'btn ghost small', type: 'button', onclick: () => act(() => api(`/api/routines/${rt.id}/save`, 'POST'), 'Saved as a new recording') }, 'Save as recording')));
+  const box = $('suggestions'); box.replaceChildren();
+  if (!items.length) box.append(empty('Nothing yet. Record the same task a few times, or play a recording at consistent times, and suggestions appear here.'), h('div', { class: 'item' }, h('button', { class: 'btn ghost small', type: 'button', onclick: mineNow }, 'Search for repeated routines')));
+  else { box.append(...items, h('div', { class: 'item' }, h('button', { class: 'btn ghost small', type: 'button', onclick: mineNow }, 'Search for repeated routines'))); }
+}
+const mineNow = () => act(async () => { const r = await api('/api/routines/mine?min_support=3', 'POST'); say(r.found.length ? `Found ${r.found.length} routine(s)` : 'No routines yet. Record the same task a few times.'); });
+
+function renderRecordings(list) {
+  const box = $('recs'); box.replaceChildren();
+  if (!list.length) { box.append(empty('No recordings yet. Go to Overview, name a routine and click Start recording.')); return; }
+  for (const r of list) {
+    const slot = h('div', {}, h('div', { class: 'sub' }, 'Loading timeline...'));
+    loadTape(r).then(tl => slot.replaceChildren(drawTape(tl, false)));
+    box.append(h('div', { class: 'item rec' },
+      h('div', {}, h('button', { class: 'name', type: 'button', onclick: () => openDrawer(r.id) }, r.name),
+        h('div', { class: 'sub num' }, `${r.event_count} events, ${secs(r.duration_ms)}${r.folder ? ', ' + r.folder : ''}`)),
+      slot,
+      h('div', { class: 'row' },
+        h('button', { class: 'btn small', type: 'button', onclick: () => playRec(r.id) }, 'Play'),
+        h('button', { class: 'btn ghost small', type: 'button', onclick: () => openDrawer(r.id) }, 'Details'))));
+  }
+}
+const playRec = (id) => act(() => api(`/api/recordings/${id}/play?speed=${encodeURIComponent($('play-speed').value || 1)}&loops=${encodeURIComponent($('play-loops').value || 1)}`, 'POST'),
+  'Starting in 3 seconds. Switch to the target window. Mouse to the top-left corner stops it.');
+
+function renderSchedules(list) {
+  const sel = $('s-rec'), keep = sel.value; sel.replaceChildren(...recs.map(r => h('option', { value: r.id }, `${r.id}: ${r.name}`)));
+  if (keep) sel.value = keep;
+  const box = $('scheds'); box.replaceChildren();
+  if (!list.length) { box.append(empty('No schedules yet. Describe one above, for example "every weekday at 9am".')); return; }
+  for (const x of list) box.append(h('div', { class: 'item sched' },
+    h('div', {}, h('b', {}, recNames[x.recording_id] || '#' + x.recording_id), h('div', { class: 'sub' }, x.active ? 'Active' : 'Removed')),
+    h('div', {}, h('code', {}, x.rule), h('div', { class: 'sub' }, x.active ? 'Next run: ' + (x.next_run ? fmtIso(x.next_run) : 'n/a') + (x.retry ? `, ${x.retry} retries` : '') : '')),
+    x.active ? h('button', { class: 'btn ghost small', type: 'button', onclick: () => act(() => api(`/api/schedules/${x.id}/remove`, 'POST'), 'Schedule removed') }, 'Remove') : h('span')));
+}
+function renderActivity(runs, rep, remote) {
+  $('report').textContent = `${rep.total_runs} runs, ${rep.success_rate_percent == null ? 'no success rate yet' : rep.success_rate_percent + '% succeeded'}. ${rep.remote_calls} remote calls (${rep.remote_refused} refused).`;
+  const rb = $('runs'); rb.replaceChildren();
+  if (!runs.length) rb.append(empty('No runs yet. Play a recording to see it here.'));
+  for (const r of runs.slice(0, 40)) rb.append(h('div', { class: 'item run' },
+    h('span', {}, h('span', { class: 'pill ' + r.status }, r.status)),
+    h('div', {}, h('b', {}, recNames[r.recording_id] || '#' + r.recording_id), h('div', { class: 'sub' }, r.message)),
+    h('span', { class: 'sub num' }, fmt(when(r.started_at)))));
+  const mb = $('remote'); mb.replaceChildren();
+  if (!remote.length) mb.append(empty('No remote calls so far.'));
+  for (const r of remote.slice(0, 30)) mb.append(h('div', { class: 'item run' },
+    h('span', {}, h('span', { class: 'pill ' + (r.granted ? 'success' : 'failed') }, r.granted ? 'allowed' : 'refused')),
+    h('div', {}, h('b', {}, r.action), h('div', { class: 'sub' }, r.client)), h('span', { class: 'sub num' }, fmt(when(r.at)))));
+}
+let settingsLoaded = false;
+function renderSettings(st, ai) {
+  document.querySelectorAll('.scope').forEach(c => { c.checked = st.remote_scope.includes(c.value); });
+  $('ai-pill').textContent = ai.available ? 'Cloud AI on (' + ai.model + ')' : 'Local only';
+  $('ai-pill').style.color = ai.available ? 'var(--ai)' : '';
+  $('ai-hint').textContent = ai.has_key ? `A key ending ${ai.key_hint} is saved on this computer.` : 'No key saved. Local AI works without one.';
+  if (!settingsLoaded) { $('ai-cloud').checked = ai.cloud_enabled; $('ai-model').value = ai.model; settingsLoaded = true; }
+}
+
+/* ---------- recording drawer ---------- */
+async function openDrawer(id) {
+  const box = $('drawer-in'); box.replaceChildren(h('p', { class: 'muted' }, 'Analysing...'));
+  if (!$('drawer').open) $('drawer').showModal();
+  try {
+    const [ins, tl] = await Promise.all([api(`/api/ai/recordings/${id}`), api(`/api/recordings/${id}/timeline`)]);
+    renderDrawer(id, ins, tl);
+  } catch (e) { box.replaceChildren(h('p', { class: 'muted' }, e.message), h('button', { class: 'btn ghost', type: 'button', onclick: () => $('drawer').close() }, 'Close')); }
+}
+function renderDrawer(id, ins, tl) {
+  const rec = recs.find(r => r.id === id) || { name: '#' + id };
+  const st = ins.stats, rel = ins.reliability, map = drawMap(tl);
+  const polish = h('button', { class: 'btn ghost small', type: 'button', disabled: !aiStatus.available, title: aiStatus.available ? '' : 'Turn on cloud AI in Settings',
+    onclick: async () => { try { const p = await api(`/api/ai/recordings/${id}/polish`, 'POST'); renderDrawer(id, p, tl); if (p.ai_note) say(p.ai_note, 'err'); } catch (e) { say(e.message, 'err'); } } }, 'Polish with cloud AI');
+  const stat = (v, l) => h('div', {}, h('b', { class: 'num' }, v), h('span', {}, l));
+  $('drawer-in').replaceChildren(
+    h('div', { class: 'row', style: 'justify-content:space-between' }, h('h2', {}, rec.name), h('button', { class: 'btn ghost small', type: 'button', onclick: () => $('drawer').close() }, 'Close')),
+    h('div', {}, h('div', { class: 'row', style: 'gap:8px;margin-bottom:6px' }, h('span', { class: 'aimark' }, sparkle()), h('b', {}, 'Summary'),
+      ins.source === 'cloud' ? h('span', { class: 'pill' }, 'cloud') : null),
+      h('p', {}, ins.description), h('p', { class: 'sub', style: 'margin-top:6px' }, 'A fitting name might be "' + ins.suggested_name + '".'),
+      ins.ai_note ? h('p', { class: 'sub', style: 'margin-top:6px' }, ins.ai_note) : null),
+    h('div', { class: 'chips' }, ins.steps.map(x => h('span', { class: 'chip' }, x))),
+    h('div', {}, h('h3', { style: 'margin-bottom:8px' }, 'Timeline'), drawTape(tl, true),
+      h('div', { class: 'legend' }, h('span', {}, h('i', { style: 'background:var(--click)' }), 'Click'), h('span', {}, h('i', { style: 'background:var(--key)' }), 'Key'), h('span', {}, h('i', { style: 'background:var(--scroll)' }), 'Scroll'),
+        tl.truncated ? h('span', {}, `Showing the first ${tl.events.length} of ${tl.total_events} events`) : null)),
+    h('div', { class: 'stats' }, stat(st.clicks, 'Clicks'), stat(st.characters_typed, 'Characters typed'), stat(st.scrolls, 'Scrolls'), stat(secs(st.duration_ms), 'Duration'), stat(secs(st.longest_gap_ms), 'Longest pause'),
+      stat(ins.routine_score ? ins.routine_score.routine_score + '/100' : 'n/a', 'Routine score')),
+    map ? h('div', {}, h('h3', { style: 'margin-bottom:8px' }, 'Where the clicks land'), map) : null,
+    ins.advice.length ? h('div', {}, h('h3', { style: 'margin-bottom:8px' }, 'Advice'), h('ul', { class: 'tips' }, ins.advice.map(a => h('li', { class: a.level }, a.text)))) : null,
+    h('div', {}, h('h3', { style: 'margin-bottom:8px' }, 'Reliability'),
+      h('div', { class: 'row' }, h('span', { class: 'pill ' + (rel.label.replace(/ /g, '-')) }, rel.label), h('span', { class: 'sub' }, rel.runs ? `${rel.runs} runs${rel.last_failure ? ', last failure: ' + rel.last_failure : ''}` : 'Not played yet'),
+        h('div', { class: 'dots', title: 'Most recent runs, oldest first' }, rel.recent.map(x => h('i', { class: x }))))),
+    ins.predicted_next.length ? h('div', {}, h('h3', { style: 'margin-bottom:8px' }, 'What you usually do next'),
+      h('div', { class: 'chips' }, ins.predicted_next.map(p => h('span', { class: 'chip' }, `${p.action} ${Math.round(p.probability * 100)}%`)))) : null,
+    ins.similar.length ? h('div', {}, h('h3', { style: 'margin-bottom:8px' }, 'Similar recordings'),
+      h('div', { class: 'chips' }, ins.similar.map(x => h('button', { class: 'chip', type: 'button', style: 'cursor:pointer', onclick: () => openDrawer(x.recording_id) }, `${x.name} ${Math.round(x.similarity * 100)}%`)))) : null,
+    h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', onclick: () => { playRec(id); $('drawer').close(); } }, 'Play'), polish));
+}
+$('drawer').addEventListener('click', (e) => { if (e.target === $('drawer')) $('drawer').close(); });
+
+/* ---------- natural-language scheduler ---------- */
+let parsed = null, parseTimer, parseSeq = 0;
+$('s-text').addEventListener('input', () => {
+  clearTimeout(parseTimer); parsed = null; $('s-add').disabled = true;
+  const text = $('s-text').value.trim(), seq = ++parseSeq;
+  if (!text) { $('s-preview').className = 'preview muted'; $('s-preview').textContent = 'Try: every monday and friday at 5pm, monthly on the 15th at 10am, every 2 hours.'; return; }
+  parseTimer = setTimeout(async () => {
+    try {
+      const r = await api('/api/ai/parse-schedule', 'POST', { text }); if (seq !== parseSeq) return;
+      parsed = r; $('s-add').disabled = false; const p = $('s-preview'); p.className = 'preview';
+      p.replaceChildren(h('div', {}, h('b', {}, r.human), ' ', h('code', {}, r.rule), r.source === 'cloud' ? h('span', { class: 'pill', style: 'margin-left:8px' }, 'cloud') : null),
+        h('div', { class: 'sub' }, 'Next runs: ' + r.next_runs.map(fmtIso).join(', ')), ...r.notes.map(n => h('div', { class: 'sub' }, n)));
+    } catch (e) { if (seq !== parseSeq) return; $('s-preview').className = 'preview err'; $('s-preview').textContent = e.message; }
+  }, 300);
+});
+$('s-add').onclick = () => parsed && act(async () => {
+  await api('/api/schedules', 'POST', { recording_id: Number($('s-rec').value), rule: parsed.rule, retry: Number($('s-retry').value) || 0 });
+  $('s-text').value = ''; parsed = null; $('s-add').disabled = true; $('s-preview').className = 'preview muted'; $('s-preview').textContent = 'Added.';
+}, 'Schedule added');
+$('m-fill').onclick = () => {
+  try {
+    const type = $('m-type').value, [hh, mm] = ($('m-time').value || '09:00').split(':').map(Number), date = $('m-date').value ? $('m-date').value.split('-').map(Number) : null;
+    let rule;
+    if (type === 'daily') rule = `${mm} ${hh} * * *`; else if (type === 'weekly') rule = `${mm} ${hh} * * ${$('m-day').value}`;
+    else if (type === 'monthly') { if (!date) throw new Error('Pick a date: its day of the month is used'); rule = `${mm} ${hh} ${date[2]} * *`; }
+    else if (type === 'yearly') { if (!date) throw new Error('Pick a date: its month and day are used'); rule = `${mm} ${hh} ${date[2]} ${date[1]} *`; }
+    else rule = $('m-cron').value.trim();
+    $('s-text').value = ''; parsed = null;
+    // a raw rule is validated by the server when saved
+    parsed = { rule, human: rule, next_runs: [], notes: ['Manual rule. It is validated when you add it.'], source: 'manual' };
+    $('s-add').disabled = false; $('s-preview').className = 'preview'; $('s-preview').replaceChildren(h('div', {}, h('b', {}, 'Manual rule '), h('code', {}, rule)), h('div', { class: 'sub' }, 'Choose a recording and click Add schedule.'));
+  } catch (e) { say(e.message, 'err'); }
+};
+
+/* ---------- recorder, settings buttons ---------- */
+$('rec-start').onclick = () => act(() => api('/api/record/start', 'POST', { name: $('rec-name').value || 'Untitled' }), 'Recording. Switch to your target window now.');
+$('rec-stop').onclick = () => act(() => api('/api/record/stop', 'POST'), 'Recording saved');
+$('stop-play').onclick = () => act(() => api('/api/play/stop', 'POST'), 'Stop requested');
+$('save-scope').onclick = () => act(() => api('/api/settings', 'POST', { remote_scope: [...document.querySelectorAll('.scope')].filter(c => c.checked).map(c => c.value) }), 'Permissions saved');
+$('show-token').onclick = () => act(async () => { $('token-out').textContent = (await api('/api/settings', 'POST', {})).token; });
+$('new-token').onclick = () => act(async () => { $('token-out').textContent = (await api('/api/settings', 'POST', { regenerate_token: true })).token; }, 'New token created. Update your Hermes client.');
+$('ai-save').onclick = () => act(async () => {
+  const body = { cloud_enabled: $('ai-cloud').checked, model: $('ai-model').value.trim() };
+  if ($('ai-key').value.trim()) body.api_key = $('ai-key').value.trim();
+  await api('/api/ai/settings', 'POST', body); $('ai-key').value = '';
+}, 'AI settings saved');
+
+/* ---------- copilot ---------- */
+const CHIPS = ['What should I automate?', 'How reliable are my runs?', 'Find routines', 'List my recordings'];
+function openCopilot() { $('copilot').classList.add('open'); $('copilot').setAttribute('aria-hidden', 'false'); $('cp-input').focus(); }
+function closeCopilot() { $('copilot').classList.remove('open'); $('copilot').setAttribute('aria-hidden', 'true'); $('open-copilot').focus(); }
+$('open-copilot').onclick = openCopilot; $('close-copilot').onclick = closeCopilot;
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('copilot').classList.contains('open') && !$('drawer').open) closeCopilot(); });
+$('cp-chips').replaceChildren(...CHIPS.map(c => h('button', { class: 'chip', type: 'button', style: 'cursor:pointer', onclick: () => ask(c) }, c)));
+function bot(text, cls) { const m = h('div', { class: 'msg ' + (cls || 'bot') }, text); $('cp-log').append(m); $('cp-log').scrollTop = 1e9; return m; }
+bot('Hi. I can play or schedule your recordings, explain what one does, and look for patterns. I never run anything until you confirm.');
+async function ask(text) {
+  text = (text || '').trim(); if (!text) return;
+  bot(text, 'me'); $('cp-input').value = ''; $('cp-send').disabled = true;
+  const wait = bot('Thinking...');
+  try {
+    const r = await api('/api/ai/ask', 'POST', { message: text }); wait.remove();
+    bot(r.reply + (r.source === 'cloud' ? '\n(answered with cloud AI)' : ''));
+    if (r.proposal) showProposal(r.proposal);
+  } catch (e) { wait.remove(); bot(e.message); }
+  $('cp-send').disabled = false; $('cp-input').focus();
+}
+function showProposal(p) {
+  const card = h('div', { class: 'proposal' }, h('b', {}, p.summary));
+  const run = h('button', { class: 'btn ai small', type: 'button', onclick: async () => {
+    run.disabled = true;
+    try {
+      const r = await api('/api/ai/execute', 'POST', { action: p.action, recording_id: p.recording_id ?? null, speed: p.speed ?? 1, loops: p.loops ?? 1, rule: p.rule ?? null, retry: p.retry ?? 0 });
+      card.replaceChildren(h('div', {}, r.message)); await refresh();
+    } catch (e) { run.disabled = false; say(e.message, 'err'); }
+  } }, 'Confirm');
+  card.append(h('div', { class: 'row' }, run, h('button', { class: 'btn ghost small', type: 'button', onclick: () => card.remove() }, 'Dismiss')));
+  $('cp-log').append(card); $('cp-log').scrollTop = 1e9;
+}
+$('cp-form').addEventListener('submit', (e) => { e.preventDefault(); ask($('cp-input').value); });
+
+/* ---------- start ---------- */
+go(location.hash.slice(1));
+window.addEventListener('hashchange', () => go(location.hash.slice(1)));
+refresh().catch(e => say(e.message, 'err'));
+setInterval(() => { if (!$('drawer').open) refresh().catch(() => {}); }, 5000);
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# Libraries named in the MemoryBox guide (Phase 1)
+# The AI layer (ai/) needs NO extra libraries: it uses only the standard library.
+pynput
+pyautogui
+apscheduler
+fastapi
+uvicorn
+pandas
+scikit-learn
+pytest
+
+# Extra libraries this code uses
+prefixspan        # sequential pattern mining (Phase 7); a simple fallback is used if missing
+httpx             # needed by FastAPI's test client
+
+# Windows only: device monitor (Phase 4) and password-field protection (safety rule)
+WMI; sys_platform == "win32"
+pywin32; sys_platform == "win32"
+uiautomation; sys_platform == "win32"
